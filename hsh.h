@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <pthread.h>
+#include <dirent.h>
 
 #define COMMAND_MAX_LEN 1024
 #define FUNCTION_MAX_TYPE 7
@@ -31,6 +32,7 @@ void help(char *command);
 void remove_hsh(char *command);
 void change_directory(char *command);
 void exit_shell(char *command);
+bool tryexec(char *command);
 void execute(char *command);
 
 typedef struct {

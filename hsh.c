@@ -1,9 +1,33 @@
 #include "hsh.h"
 
-char helpmsg[] = "Available commands:\n"
-                 "sdf hello\n"
+char helpmsg[] = "\n\nAvailable commands:\n"
+                 "sdf (Will implement this func later)\n\n"
+
                  "fws <workstation number>\n"
-                 "fgit <commit message>\n";
+                 "====can connect to workstation fast\n"
+                 "!!!!WARNING: this command will NOT work for the first time\n"
+                 "!!!!         when you connect to a new workstation\n"
+                 "====example: /fws ws3/ or /fws 3/ can connect to ws3\n"
+                 "====         (for meow1 or meow2, use /fws meow1/ or /fws meow2/)\n"
+                 "====flags:\n"
+                 "==== -p: set password\n"
+                 "==== -u: set username\n"
+                 "====example: /fws -p 123456789/ can set password\n\n"
+
+                 "fgit <commit message>\n"
+                 "====can add, commit and push to git fast\n\n"
+
+                 "rmhsh\n"
+                 "====remove hsh\n\n"
+
+                 "cd <directory>\n"
+                 "====change directory\n\n"
+
+                 "exit\n"
+                 "====exit hsh\n"
+                 "====use -k to kill all running processes\n\n"
+                 
+                 "other commands will be executed by system\n\n\n";
 
 function func_mappings[] = {
     {"sdf", self_define},
@@ -16,20 +40,21 @@ function func_mappings[] = {
 };
 
 void self_define(char *command) {
-    char *args = strtok(command, " ");
-    snprintf(output, COMMAND_MAX_LEN, "Will implement this function later.\n");
+    //char *args = strtok(command, " ");
+    snprintf(output, COMMAND_MAX_LEN, "%s: Will implement this function later.\n", command);
     write(STDOUT_FILENO, output, strlen(output));
 }
 
 void fast_connect_workstation(char *command) {
-    char workstation[6];
+    char workstation[6] = {"???\0"};
     char *args = strtok(command, " ");
     args = strtok(NULL, " ");
-    int wsnum = 0;
     int cpwd = -1, cuser = -1, num = 1;
     while(args != NULL) {
         if (((args[0] - '0') > 0) && ((args[0] - '0') < 8)) {
-            wsnum = atoi(args);
+            strcpy(workstation, "ws");
+            workstation[2] = args[0];
+            workstation[3] = '\0';
         }
         else if (args[0] == '-'){
             int flaglen = strlen(args);
@@ -115,8 +140,15 @@ void fast_connect_workstation(char *command) {
     strcat(address, ".csie.ntu.edu.tw");
     char syscmd[COMMAND_MAX_LEN];
     snprintf(syscmd, COMMAND_MAX_LEN, "sshpass -p %s ssh %s", passwd, address);
-    printf("%s\n", syscmd);
-    system(syscmd);
+    if(workstation[0] != '?') {
+        system(syscmd);
+    }
+    else {
+        snprintf(output, COMMAND_MAX_LEN, 
+        "changed successfully\nnew address: %s\nnew password: %s\n"
+        , address, passwd);
+        write(STDOUT_FILENO, output, strlen(output));
+    }
 }
 
 void fast_push_to_git(char *command) {
@@ -142,43 +174,62 @@ void help(char *command) {
 }
 
 bool tryexec(char *command){
-    char oldpath[COMMAND_MAX_LEN];
-    getcwd(oldpath, COMMAND_MAX_LEN);
-    char newpath[COMMAND_MAX_LEN];
-    char path[100][100];
-    int i = 0;
-    while(command[i] != ' ' || command[i] != '\0') {
-        newpath[i] = command[i];
-        i++;
+    if(command[0] == '~' && command[1] == '/') {
+        char tmp[COMMAND_MAX_LEN];
+        strcpy(tmp, getenv("HOME"));
+        strcat(tmp, command + 1);
+        strcpy(command, tmp);
     }
-    char *args = strtok(newpath, "/");
-    while(args != NULL) {
-        strcpy(path[i], args);
-        args = strtok(NULL, "/");
-        i++;
+    int length = strlen(command), befflag;
+    while(command[length] != '/')
+        length--;
+    command[length] = '\0';
+    befflag = length + 1;
+    while(command[befflag] != '\0' && command[befflag] != ' ')
+        befflag++;
+    command[befflag] = '\0';        
+    struct dirent *entry;
+    DIR *dp = opendir(command);
+    if(dp == NULL){
+        command[length] = '/', command[befflag] = ' ';
+        snprintf(errmsg, COMMAND_MAX_LEN, "No such file or directory (@NO DIR)\n");
+        return false;
     }
-    for(int j = 0; j < i - 1 && i - 1 >= 0; j++) {
-        if(chdir(path[j]) == -1) {
-            chdir(oldpath);
-            snprintf(errmsg, COMMAND_MAX_LEN, "No such file or directory\n");
-            return false;
+    while((entry = readdir(dp)) != NULL) {
+        if(strcmp(entry->d_name, command + length + 1) == 0) {
+            closedir(dp);
+            command[length] = '/';
+            struct stat st;
+            stat(command, &st);
+            uid_t uid = getuid();
+            gid_t gid = getgid();
+            bool permission = false;
+            if(uid == st.st_uid) {
+                if(st.st_mode & S_IRUSR) {
+                    permission = true;
+                }
+            }
+            if(gid == st.st_gid) {
+                if(st.st_mode & S_IRGRP) {
+                    permission = true;
+                }
+            }
+            else{
+                if(st.st_mode & S_IROTH) {
+                    permission = true;
+                }
+                else {
+                    snprintf(errmsg, COMMAND_MAX_LEN, "Permission denied\n");
+                }
+            }
+            command[befflag] = ' ';
+            return permission;
         }
     }
-    struct stat st;
-    if(stat(path[i - 1], &st) == -1) {
-        chdir(oldpath);
-        snprintf(errmsg, COMMAND_MAX_LEN, "No such file or directory\n");
-        return false;
-    }
-    uid_t uid = getuid();
-    gid_t gid = getgid();
-    if(st.st_uid != uid || st.st_gid != gid || (st.st_mode & S_IXUSR) == 0) {
-        chdir(oldpath);
-        snprintf(errmsg, COMMAND_MAX_LEN, "Permission denied\n");
-        return false;
-    }
-    chdir(oldpath);
-    return true;
+    closedir(dp);
+    command[befflag] = ' ';
+    snprintf(errmsg, COMMAND_MAX_LEN, "No such file or directory (@NO FILE)\n");
+    return false;
 }
 
 void execute(char *command) {
@@ -203,8 +254,13 @@ void execute(char *command) {
     }
     argfc[i] = NULL;
     new_pcb->start_time = time(NULL);
+    sigset_t sigset;
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &sigset, NULL);
     pid_t childpid = fork();
     if (childpid == 0) {
+        sigprocmask(SIG_UNBLOCK, &sigset, NULL);
         execvp(argfc[0], argfc);
         exit(0);
     }
@@ -219,19 +275,17 @@ void execute(char *command) {
             tail = new_pcb;
         }
         if(argfc[i - 1][0] != '&') {
-            sigset_t sigset;
-            int signo;
-            sigemptyset(&sigset);
-            sigaddset(&sigset, SIGCHLD);
             bool keep_waiting = true;
             while(keep_waiting) {
-                sigwait(&sigset, &signo);
-                if(signo == SIGCHLD) {
+                sigset_t nothing;
+                sigemptyset(&nothing);
+                if(sigsuspend(&nothing) == -1 && errno == EINTR) {
                     pid_t returnpid = waitpid(-1, NULL, WNOHANG);
                     if(returnpid == childpid) {
                         keep_waiting = false;
+                        sigprocmask(SIG_UNBLOCK, &sigset, NULL);
                     }
-                    else if(returnpid > 0) {
+                    if(returnpid > 0) {
                         pcb *tmp = head, *prev = NULL;
                         while(tmp != NULL) {
                             if(tmp->pid == returnpid) {
@@ -266,6 +320,12 @@ void execute(char *command) {
 void change_directory(char *command) {
     char *args = strtok(command, " ");
     args = strtok(NULL, " ");
+    if(args[0] == '~') {
+        char tmp[COMMAND_MAX_LEN];
+        strcpy(tmp, getenv("HOME"));
+        strcat(tmp, args + 1);
+        args = tmp;
+    }
     if (args == NULL) {
         snprintf(errmsg, COMMAND_MAX_LEN, "cd: missing argument\n");
         return;
@@ -278,9 +338,9 @@ void change_directory(char *command) {
 void exit_shell(char *command) {
     char *args = strtok(command, " ");
     args = strtok(NULL, " ");
-    if(strcmp(args, "-k") == 0) {
+    if(args != NULL && strcmp(args, "-k") == 0) {
         args = strtok(NULL, " ");
-        if(args != NULL) {
+        if(args != NULL && strcmp(args, "-r") != 0) {
             snprintf(errmsg, COMMAND_MAX_LEN, "exit: too many argument\n");
             return;
         }
@@ -288,11 +348,18 @@ void exit_shell(char *command) {
             kill(head->pid, SIGKILL);
             pcb *tmp = head;
             head = head->next;
+            time_t end_time = time(NULL);
+            snprintf(output, COMMAND_MAX_LEN,
+            "Process %s terminated. (pid: %d, runtime: %ld seconds)\n",
+            tmp->name, tmp->pid, end_time - tmp->start_time);
             free(tmp);
             pcb_num--;
         }
+        if(args != NULL){
+            return;
+        }
     }
-    else{
+    else if(args != NULL) {
         snprintf(errmsg, COMMAND_MAX_LEN, "exit: unknown flag\n");
         return;
     }
@@ -312,12 +379,13 @@ void remove_hsh(char *command) {
     char yn[5];
     fgets(yn, 5, stdin);
     if(yn[0] == 'y' || yn[0] == 'Y' || strcmp(yn, "yes") == 0) {
+        printf("unlinking /usr/local/bin/hsh\n");
+        system("sudo rm -f /usr/local/bin/hsh");
         printf("unlinking %s\n", datapath);
-        unlink(datapath);
-        printf("unlinking /bin/local/hsh\n");
-        unlink("/bin/local/hsh");
-        strncpy(command, "exit -k\0", 8);
+        system("rm -rf ~/.hsh");
+        strncpy(command, "exit -k -r\0", 12);
         exit_shell(command);
         write(STDOUT_FILENO, "hsh removed.\n", 13);
+        exit(0);
     }
 }

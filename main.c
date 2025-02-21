@@ -1,9 +1,6 @@
 #include "hsh.h"
 
-char welcome[] = "============================\n"
-                 "Welcome to Hao's shell (hsh)\n"
-                 "============================\n"
-                 "Type 'help' to see the available commands\n";
+char welcome[] = "Type 'help' to see the available commands\n";
 char userpath[COMMAND_MAX_LEN], passwdpath[COMMAND_MAX_LEN], datapath[COMMAND_MAX_LEN];
 
 bool check_first_time() {
@@ -86,16 +83,22 @@ int main(int argc, char **argv) {
         }
 
         if (!handled) {
-            execute(command);
-            system(command);
+            if(tryexec(command)) {
+                execute(command);
+            }
+            else{
+                system(command);
+            }
+//printf("errmsg: %s\n", errmsg);
             //snprintf(errmsg, COMMAND_MAX_LEN, "Unknown command: %s\n", command);
             //write(STDOUT_FILENO, errmsg, strlen(errmsg));
             //errmsg[0] = '\0';
         }
         else if (errmsg[0] != '\0') {
             write(STDOUT_FILENO, errmsg, strlen(errmsg));
-            errmsg[0] = '\0';
         }
+        memset(command, 0, COMMAND_MAX_LEN);
+        memset(errmsg, 0, COMMAND_MAX_LEN);
         memset(output, 0, COMMAND_MAX_LEN);
     }
 
